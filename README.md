@@ -25,33 +25,34 @@ A label printing plugin for [InvenTree](https://inventree.org) which provides su
 
 > [!NOTE]
 > The latest version of this plugin currently supports the following InvenTree versions:
-> - **1.0.x** (tested with version **1.0.5**)
-> - **1.1.x** (tested with version **1.1.3**)
+> - **1.3.x** (tested with version **1.3.0** and **1.3.2**)
 > - **1.2.x** (tested with version **1.2.0**)
-> - **1.3.x** (tested with version **1.3.0**)
+> - **1.1.x** (tested with version **1.1.3**)
+> - **1.0.x** (tested with version **1.0.5**)
 > 
 > For older InvenTree versions, use version `1.2.2`, which supports the following InvenTree versions:
-> - **0.15.x**
-> - **0.16.x** (tested with version **0.16.5**)
 > - **0.17.x** (tested with version **0.17.14**)
+> - **0.16.x** (tested with version **0.16.5**)
+> - **0.15.x**
 > Some even older or newer versions might also work, but have not been tested. 
 > 
 > If you are having trouble installing, see [Common Issues](#common-issues) for possible solutions or create an issue.
 
-The simplest way of installing is by using the ```Install Plugin``` button on the InvenTree ```Plugin Settings``` page and then entering the package name:
+The simplest and recommended way of installing is by using the ```Install Plugin``` button above the plugins table on the InvenTree ```Plugins``` page in the ```Admin Center``` and then entering the package name:
 
 ![Plugin installation via UI: The "Install Plugin" modal window](https://raw.githubusercontent.com/melektron/inventree-adv-sheet-label/main/images/install_via_ui.png)
 
-Alternatively, you can install this plugin manually in the InvenTree container as follows:
 
-```
-pip install inventree-adv-sheet-label
-```
-
-Or, add the package name to your plugins.txt file (this is automatically done when using the UI method) to install automatically when using the ```invoke install``` command:
+Alternatively you can add the package name to your plugins.txt file (this is automatically done when using the UI method) to install automatically when using the ```invoke install``` command:
 
 ```
 inventree-adv-sheet-label
+```
+
+Or, you can install this plugin manually in the InvenTree server AND worker container as follows (not recommended for production):
+
+```bash
+pip install inventree-adv-sheet-label
 ```
 
 In any case, after installation, the plugin needs to be enabled in the above mentioned plugin settings page:
@@ -63,6 +64,10 @@ In any case, after installation, the plugin needs to be enabled in the above men
 This plugin adds the "AdvancedLabelSheet" printing option to the label printing dialog:
 
 ![Printing dialog with plugin selection open](https://raw.githubusercontent.com/melektron/inventree-adv-sheet-label/main/images/plugin_selection.png)
+
+Printing with this plugin generates a PDF file which will be opened in a new tab in order to subsequently be printed using a regular office printer.
+
+Rendering should not take longer than a few seconds, usually less than two.
 
 ### Sheet layout
 

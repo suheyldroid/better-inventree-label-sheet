@@ -20,7 +20,14 @@ from report.models import DataOutput, LabelTemplate
 from rest_framework import serializers
 from rest_framework.request import Request
 
-from .layouts import LAYOUT_SELECT_OPTIONS, LAYOUTS, SheetLayout
+from .layouts import (
+    DEFAULT_LAYOUTS,
+    LAYOUT_SELECT_OPTIONS,
+    SheetLayout,
+    build_select_options,
+    default_layouts_json,
+    parse_layouts_json,
+)
 
 _log = logging.getLogger("better-inventree-label-sheet")
 # _log.setLevel(logging.DEBUG)
@@ -37,6 +44,17 @@ def get_default_layout() -> str:
         return LAYOUT_SELECT_OPTIONS[0][
             0
         ]  # use the first one if there is no other option (is)
+
+
+def get_layout_choices() -> list[tuple[str, str]]:
+    """
+    Builds the list of selectable layout options from the live (editable)
+    layouts stored in the database. Falls back to the static default options
+    if the plugin instance is not available yet.
+    """
+    if _plugin_instance is not ...:
+        return build_select_options(_plugin_instance.get_layouts())
+    return LAYOUT_SELECT_OPTIONS
 
 
 def get_default_skip() -> int:
@@ -56,7 +74,7 @@ class BetterLabelPrintingOptionsSerializer(serializers.Serializer):
     sheet_layout = serializers.ChoiceField(
         label="Sheet layout",
         help_text="Page size and label arrangement",
-        choices=LAYOUT_SELECT_OPTIONS,
+        choices=get_layout_choices(),
         default=get_default_layout,
     )
 
@@ -112,16 +130,21 @@ class BetterLabelPrinterPlugin(LabelPrintingMixin, SettingsMixin, InvenTreePlugi
         "DEFAULT_LAYOUT": {
             "name": "Default sheet layout",
             "description": "The default sheet layout selection when printing labels",
-            "choices": LAYOUT_SELECT_OPTIONS,
+            "choices": get_layout_choices,
             "default": LAYOUT_SELECT_OPTIONS[0][0],
             "required": True,
+        },
+        "CUSTOM_LAYOUTS": {
+            "name": "Custom layouts (JSON)",
+            "description": "Sheet layout definitions as a JSON object. Each key is the layout code, each value is the layout configuration. Edit to add, remove, or modify layouts.",
+            "default": "",
         },
         "LABEL_SKIP_COUNTER": {
             "name": "Label skip counter",
             "description": "Global counter for auto-incrementing the default amount of labels to skip when printing. If page is full, this wraps back to zero accordingly.",
             "default": 0,
             "validator": [int, MinValueValidator(0)],
-            "hidden": True,  # maybe shoudl actually show this for manual reset? but for now I'll not show it
+            "hidden": True,
         },
     }
 
@@ -142,6 +165,19 @@ class BetterLabelPrinterPlugin(LabelPrintingMixin, SettingsMixin, InvenTreePlugi
     def label_skip_counter(self, counter: int) -> None:
         self.set_setting("LABEL_SKIP_COUNTER", counter)
 
+    def get_layouts(self) -> dict[str, SheetLayout]:
+        """Return the active layouts, loading from the CUSTOM_LAYOUTS setting.
+
+        If CUSTOM_LAYOUTS is empty, the default seed layouts are written to it
+        first, so users can start editing from a populated JSON object.
+        """
+        raw = self.get_setting("CUSTOM_LAYOUTS")
+        if not raw or not raw.strip():
+            seed = default_layouts_json()
+            self.set_setting("CUSTOM_LAYOUTS", seed)
+            return dict(DEFAULT_LAYOUTS)
+        return parse_layouts_json(raw)
+
     def _find_closest_match(
         self, label: LabelTemplate, prefer_round: bool
     ) -> tuple[SheetLayout, bool, bool]:
@@ -159,11 +195,14 @@ class BetterLabelPrinterPlugin(LabelPrintingMixin, SettingsMixin, InvenTreePlugi
             specified: whether the layout was specified in metadata or looked for via size
             exact: whether the result size matches exactly or not
         """
+        # load the live (editable) layouts once for this lookup
+        layouts = self.get_layouts()
+
         # check for specified info in metadata:
         if isinstance(label.metadata, dict) and "sheet_layout" in label.metadata:
             layout_code = str(label.metadata["sheet_layout"])
-            if layout_code in LAYOUTS:
-                layout = LAYOUTS[layout_code]
+            if layout_code in layouts:
+                layout = layouts[layout_code]
                 return (
                     layout,
                     True,
@@ -182,7 +221,7 @@ class BetterLabelPrinterPlugin(LabelPrintingMixin, SettingsMixin, InvenTreePlugi
         closest_match: tuple[float, SheetLayout] = ...
 
         # go through all layouts to find best solution
-        for _, layout in LAYOUTS.items():
+        for _, layout in layouts.items():
             if (  # if we have exact matches, no need to check for closest contender
                 (
                     layout.label_height == label.height
@@ -272,8 +311,8 @@ class BetterLabelPrinterPlugin(LabelPrintingMixin, SettingsMixin, InvenTreePlugi
                     )
         else:  # explicit layout selection
             try:
-                sheet_layout = LAYOUTS[sheet_layout_code]
-            except IndexError:
+                sheet_layout = self.get_layouts()[sheet_layout_code]
+            except KeyError:
                 raise ValidationError(
                     f"Sheet layout '{sheet_layout_code}' does not exist."
                 )

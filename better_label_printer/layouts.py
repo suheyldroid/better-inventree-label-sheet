@@ -8,7 +8,11 @@ List of sheet label paper layouts
 """
 
 import dataclasses
+import json
+import logging
 from typing import Optional
+
+_log = logging.getLogger("better-inventree-label-sheet")
 
 
 @dataclasses.dataclass
@@ -77,6 +81,57 @@ class SheetLayout:
 
     def __str__(self) -> str:
         return f"{self.display_name} ({self.page_size.display_name}, {self.label_width}mm x {self.label_height}mm, {self.columns} columns x {self.rows} rows, {'round corners' if self.corner_radius != 0 else 'sharp corners'})"
+
+    def to_dict(self) -> dict:
+        """Serialize this layout to a plain JSON-compatible dict."""
+        return {
+            "display_name": self.display_name,
+            "page_size": {
+                "display_name": self.page_size.display_name,
+                "width": self.page_size.width,
+                "height": self.page_size.height,
+            },
+            "label_width": self.label_width,
+            "label_height": self.label_height,
+            "columns": self.columns,
+            "rows": self.rows,
+            "column_spacing": self.column_spacing,
+            "row_spacing": self.row_spacing,
+            "corner_radius": self.corner_radius,
+            "spacing_top": self.spacing_top,
+            "spacing_left": self.spacing_left,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SheetLayout":
+        """Build a SheetLayout from a plain dict (e.g. parsed from JSON).
+
+        Raises ValueError if the data is structurally invalid.
+        """
+        try:
+            page_size_data = data["page_size"]
+            page_size = PaperSize(
+                display_name=str(page_size_data["display_name"]),
+                width=float(page_size_data["width"]),
+                height=float(page_size_data["height"]),
+            )
+            spacing_top = data.get("spacing_top", None)
+            spacing_left = data.get("spacing_left", None)
+            return cls(
+                display_name=str(data["display_name"]),
+                page_size=page_size,
+                label_width=float(data["label_width"]),
+                label_height=float(data["label_height"]),
+                columns=int(data["columns"]),
+                rows=int(data["rows"]),
+                column_spacing=float(data["column_spacing"]),
+                row_spacing=float(data["row_spacing"]),
+                corner_radius=float(data["corner_radius"]),
+                spacing_top=None if spacing_top is None else float(spacing_top),
+                spacing_left=None if spacing_left is None else float(spacing_left),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid sheet layout data: {exc}") from exc
 
 
 PAPER_SIZES = {
@@ -280,7 +335,14 @@ LAYOUTS = {
     ),
 }
 
-LAYOUT_SELECT_OPTIONS = [
+# The hardcoded LAYOUTS above act as the default seed which is written to the
+# database on first run. After that, the editable layouts live in the plugin's
+# CUSTOM_LAYOUTS setting and are loaded via the helper functions below.
+DEFAULT_LAYOUTS = LAYOUTS
+
+# Codes for the automatic layout detection options. These are not real layouts
+# but special selections handled separately during printing.
+AUTO_OPTIONS = [
     (
         "auto_round",
         "Auto (round) - Automatically detect correct layout for label template according to metadata or size (prefer round-corner labels)",
@@ -289,4 +351,63 @@ LAYOUT_SELECT_OPTIONS = [
         "auto_sharp",
         "Auto (sharp) - Automatically detect correct layout for label template according to metadata or size (prefer sharp-corner labels)",
     ),
-] + [(code, str(layout)) for code, layout in LAYOUTS.items()]
+]
+
+
+def default_layouts_json() -> str:
+    """Return the default seed layouts serialized as a JSON string."""
+    return serialize_layouts(DEFAULT_LAYOUTS)
+
+
+def serialize_layouts(layouts: dict[str, SheetLayout]) -> str:
+    """Serialize a mapping of layout code -> SheetLayout to a JSON string."""
+    return json.dumps(
+        {code: layout.to_dict() for code, layout in layouts.items()},
+        indent=2,
+    )
+
+
+def parse_layouts_json(raw: str) -> dict[str, SheetLayout]:
+    """Parse a JSON string into a mapping of layout code -> SheetLayout.
+
+    Invalid individual layouts are skipped with a logged warning so a single
+    bad entry doesn't break printing entirely. If the whole string is invalid
+    or empty, the default seed layouts are returned instead.
+    """
+    if not raw or not raw.strip():
+        return dict(DEFAULT_LAYOUTS)
+
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError) as exc:
+        _log.warning(
+            "Could not parse custom layouts JSON, falling back to defaults: %s", exc
+        )
+        return dict(DEFAULT_LAYOUTS)
+
+    if not isinstance(data, dict):
+        _log.warning("Custom layouts JSON is not an object, falling back to defaults.")
+        return dict(DEFAULT_LAYOUTS)
+
+    result: dict[str, SheetLayout] = {}
+    for code, layout_data in data.items():
+        try:
+            result[str(code)] = SheetLayout.from_dict(layout_data)
+        except ValueError as exc:
+            _log.warning("Skipping invalid layout '%s': %s", code, exc)
+
+    if not result:
+        _log.warning("No valid custom layouts found, falling back to defaults.")
+        return dict(DEFAULT_LAYOUTS)
+
+    return result
+
+
+def build_select_options(layouts: dict[str, SheetLayout]) -> list[tuple[str, str]]:
+    """Build the choice options list (incl. auto options) for a set of layouts."""
+    return AUTO_OPTIONS + [(code, str(layout)) for code, layout in layouts.items()]
+
+
+# Backwards-compatible static options built from the default seed layouts.
+# Runtime code should prefer build_select_options() with the live layouts.
+LAYOUT_SELECT_OPTIONS = build_select_options(DEFAULT_LAYOUTS)

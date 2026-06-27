@@ -22,7 +22,7 @@ from rest_framework.request import Request
 
 from .layouts import LAYOUT_SELECT_OPTIONS, LAYOUTS, SheetLayout
 
-_log = logging.getLogger("inventree-adv-sheet-label")
+_log = logging.getLogger("better-inventree-label-sheet")
 # _log.setLevel(logging.DEBUG)
 _plugin_instance: "AdvancedLabelSheetPlugin" = ...
 

@@ -24,7 +24,7 @@ from .layouts import LAYOUT_SELECT_OPTIONS, LAYOUTS, SheetLayout
 
 _log = logging.getLogger("better-inventree-label-sheet")
 # _log.setLevel(logging.DEBUG)
-_plugin_instance: "AdvancedLabelSheetPlugin" = ...
+_plugin_instance: "BetterLabelPrinterPlugin" = ...
 
 
 def get_default_layout() -> str:
@@ -50,8 +50,8 @@ def get_default_skip() -> int:
     return 0
 
 
-class AdvancedLabelPrintingOptionsSerializer(serializers.Serializer):
-    """Custom printing options for the advanced label sheet plugin."""
+class BetterLabelPrintingOptionsSerializer(serializers.Serializer):
+    """Custom printing options for the better label printer plugin."""
 
     sheet_layout = serializers.ChoiceField(
         label="Sheet layout",
@@ -93,18 +93,18 @@ class AdvancedLabelPrintingOptionsSerializer(serializers.Serializer):
     )
 
 
-class AdvancedLabelSheetPlugin(LabelPrintingMixin, SettingsMixin, InvenTreePlugin):
-    """Plugin for advanced label sheet printing.
+class BetterLabelPrinterPlugin(LabelPrintingMixin, SettingsMixin, InvenTreePlugin):
+    """Plugin for better, more flexible label printing.
 
     This plugin arrays multiple labels onto a single larger sheet,
     and returns the resulting PDF file.
     """
 
-    NAME = "AdvancedLabelSheet"
-    TITLE = "Advanced Label Sheet Printer"
-    DESCRIPTION = "Arrays multiple labels onto single, standard layout label sheets with additional useful features"
-    VERSION = "1.3.1"
-    AUTHOR = "InvenTree contributors & melektron"
+    NAME = "BetterLabelPrinter"
+    TITLE = "Better Label Printer"
+    DESCRIPTION = "Flexible label printing: arrays labels onto standard label sheets with editable layouts and additional printing controls"
+    VERSION = "2.0.0"
+    AUTHOR = "suheyldroid, InvenTree contributors & melektron"
 
     BLOCKING_PRINT = True
 
@@ -125,10 +125,10 @@ class AdvancedLabelSheetPlugin(LabelPrintingMixin, SettingsMixin, InvenTreePlugi
         },
     }
 
-    PrintingOptionsSerializer = AdvancedLabelPrintingOptionsSerializer
+    PrintingOptionsSerializer = BetterLabelPrintingOptionsSerializer
 
     def __init__(self):
-        _log.debug("Initializing Advanced Sheet Label Plugin")
+        _log.debug("Initializing Better Label Printer Plugin")
         super().__init__()
         # save instance so serializers can access it.
         global _plugin_instance

@@ -3,12 +3,13 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "better-inventree-label-sheet"
-version = "1.3.1"
+name = "better-inventree-label"
+version = "2.0.0"
 authors = [
+  { name="suheyldroid" },
   { name="melektron", email="matteo@elektron.work" },
 ]
-description = "A label printing plugin for InvenTree which provides support for printing labels on off-the-shelf label sheet layouts and adds some more useful features."
+description = "A flexible label printing plugin for InvenTree. Prints labels on off-the-shelf label sheet layouts and adds editable layouts and additional printing controls."
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.9"
 classifiers = [
@@ -18,15 +19,15 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/melektron/better-inventree-label-sheet"
-Issues = "https://github.com/melektron/better-inventree-label-sheet/issues"
+Homepage = "https://github.com/suheyldroid/better-inventree-label-sheet"
+Issues = "https://github.com/suheyldroid/better-inventree-label-sheet/issues"
 
 [tool.setuptools]
-packages = ["advanced_sheet_label"]
+packages = ["better_label_printer"]
 
 [tool.pyright]
 pythonVersion = "3.9"
 reportIncompatibleVariableOverride = false
 
 [project.entry-points."inventree_plugins"]
-AdvancedSheetLabel = 'advanced_sheet_label.printing_plugin:AdvancedLabelSheetPlugin'
+BetterLabelPrinter = 'better_label_printer.printing_plugin:BetterLabelPrinterPlugin'

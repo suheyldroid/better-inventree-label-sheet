@@ -15,7 +15,12 @@ from django.core.validators import MinValueValidator
 from django.http import JsonResponse
 from django.utils.translation import gettext_lazy as _
 from plugin import InvenTreePlugin
-from plugin.mixins import LabelPrintingMixin, SettingsMixin
+from plugin.mixins import (
+    LabelPrintingMixin,
+    SettingsMixin,
+    UrlsMixin,
+    UserInterfaceMixin,
+)
 from report.models import DataOutput, LabelTemplate
 from rest_framework import serializers
 from rest_framework.request import Request
@@ -111,7 +116,13 @@ class BetterLabelPrintingOptionsSerializer(serializers.Serializer):
     )
 
 
-class BetterLabelPrinterPlugin(LabelPrintingMixin, SettingsMixin, InvenTreePlugin):
+class BetterLabelPrinterPlugin(
+    LabelPrintingMixin,
+    SettingsMixin,
+    UrlsMixin,
+    UserInterfaceMixin,
+    InvenTreePlugin,
+):
     """Plugin for better, more flexible label printing.
 
     This plugin arrays multiple labels onto a single larger sheet,
@@ -119,6 +130,7 @@ class BetterLabelPrinterPlugin(LabelPrintingMixin, SettingsMixin, InvenTreePlugi
     """
 
     NAME = "BetterLabelPrinter"
+    SLUG = "better-label-printer"
     TITLE = "Better Label Printer"
     DESCRIPTION = "Flexible label printing: arrays labels onto standard label sheets with editable layouts and additional printing controls"
     VERSION = "2.0.0"
@@ -177,6 +189,48 @@ class BetterLabelPrinterPlugin(LabelPrintingMixin, SettingsMixin, InvenTreePlugi
             self.set_setting("CUSTOM_LAYOUTS", seed)
             return dict(DEFAULT_LAYOUTS)
         return parse_layouts_json(raw)
+
+    def setup_urls(self):
+        """Expose the layout editor API endpoints under /plugin/<slug>/."""
+        from django.urls import path
+
+        from .views import LayoutsView
+
+        return [
+            path(
+                "layouts/",
+                LayoutsView.as_view(plugin=self),
+                name="better-label-layouts",
+            ),
+        ]
+
+    def get_ui_panels(self, request, context=None, **kwargs):
+        """Inject the layout editor panel into the label template page.
+
+        Only superusers can see and edit the global layout definitions.
+        """
+        context = context or {}
+
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated or not user.is_superuser:
+            return []
+
+        target_model = context.get("target_model")
+        if target_model != "labeltemplate":
+            return []
+
+        return [
+            {
+                "key": "better-label-layouts",
+                "title": "Sheet Layouts",
+                "description": "Edit the sheet label layouts used by the Better Label Printer",
+                "icon": "ti:layout-grid:outline",
+                "source": self.plugin_static_file("LayoutsPanel.js:renderPanel"),
+                "context": {
+                    "layouts_url": f"plugin/{self.SLUG}/layouts/",
+                },
+            }
+        ]
 
     def _find_closest_match(
         self, label: LabelTemplate, prefer_round: bool

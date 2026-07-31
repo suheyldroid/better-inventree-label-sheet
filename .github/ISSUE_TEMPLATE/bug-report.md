@@ -3,7 +3,7 @@ name: Bug Report
 about: Report a bug or problem to help us improve the plugin
 title: ''
 labels: bug
-assignees: melektron
+assignees: suheyldroid
 
 ---
 

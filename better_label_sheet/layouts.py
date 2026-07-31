@@ -12,7 +12,7 @@ import json
 import logging
 from typing import Optional
 
-_log = logging.getLogger("better-inventree-label-sheet")
+_log = logging.getLogger("better-label-sheet")
 
 
 @dataclasses.dataclass

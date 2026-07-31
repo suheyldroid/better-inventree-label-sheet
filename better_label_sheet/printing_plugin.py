@@ -34,9 +34,9 @@ from .layouts import (
     parse_layouts_json,
 )
 
-_log = logging.getLogger("better-inventree-label-sheet")
+_log = logging.getLogger("better-label-sheet")
 # _log.setLevel(logging.DEBUG)
-_plugin_instance: "BetterLabelPrinterPlugin" = ...
+_plugin_instance: "BetterLabelSheetPlugin" = ...
 
 
 def get_default_layout() -> str:
@@ -73,8 +73,8 @@ def get_default_skip() -> int:
     return 0
 
 
-class BetterLabelPrintingOptionsSerializer(serializers.Serializer):
-    """Custom printing options for the better label printer plugin."""
+class BetterLabelSheetPrintingOptionsSerializer(serializers.Serializer):
+    """Custom printing options for the better label sheet plugin."""
 
     sheet_layout = serializers.ChoiceField(
         label="Sheet layout",
@@ -116,7 +116,7 @@ class BetterLabelPrintingOptionsSerializer(serializers.Serializer):
     )
 
 
-class BetterLabelPrinterPlugin(
+class BetterLabelSheetPlugin(
     LabelPrintingMixin,
     SettingsMixin,
     UrlsMixin,
@@ -129,9 +129,9 @@ class BetterLabelPrinterPlugin(
     and returns the resulting PDF file.
     """
 
-    NAME = "BetterLabelPrinter"
-    SLUG = "better-label-printer"
-    TITLE = "Better Label Printer"
+    NAME = "BetterLabelSheet"
+    SLUG = "better-label-sheet"
+    TITLE = "Better Label Sheet"
     DESCRIPTION = "Flexible label printing: arrays labels onto standard label sheets with editable layouts and additional printing controls"
     VERSION = "2.0.0"
     AUTHOR = "suheyldroid, InvenTree contributors & melektron"
@@ -160,10 +160,10 @@ class BetterLabelPrinterPlugin(
         },
     }
 
-    PrintingOptionsSerializer = BetterLabelPrintingOptionsSerializer
+    PrintingOptionsSerializer = BetterLabelSheetPrintingOptionsSerializer
 
     def __init__(self):
-        _log.debug("Initializing Better Label Printer Plugin")
+        _log.debug("Initializing Better Label Sheet Plugin")
         super().__init__()
         # save instance so serializers can access it.
         global _plugin_instance
@@ -200,7 +200,7 @@ class BetterLabelPrinterPlugin(
             path(
                 "layouts/",
                 LayoutsView.as_view(plugin=self),
-                name="better-label-layouts",
+                name="better-label-sheet-layouts",
             ),
         ]
 
@@ -221,9 +221,9 @@ class BetterLabelPrinterPlugin(
 
         return [
             {
-                "key": "better-label-layouts",
+                "key": "better-label-sheet-layouts",
                 "title": "Sheet Layouts",
-                "description": "Edit the sheet label layouts used by the Better Label Printer",
+                "description": "Edit the sheet label layouts used by Better Label Sheet",
                 "icon": "ti:layout-grid:outline",
                 "source": self.plugin_static_file("LayoutsPanel.js:renderPanel"),
                 "context": {

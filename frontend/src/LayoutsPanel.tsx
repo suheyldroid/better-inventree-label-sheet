@@ -275,7 +275,7 @@ function LayoutsPanel({ context }: { context: InvenTreePluginContext }) {
     const url = context.context?.layouts_url;
     return typeof url === "string"
       ? url
-      : "plugin/better-label-printer/layouts/";
+      : "plugin/better-label-sheet/layouts/";
   }, [context.context]);
 
   const [entries, setEntries] = useState<LayoutEntry[]>([]);

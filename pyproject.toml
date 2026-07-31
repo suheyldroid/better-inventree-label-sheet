@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "better-inventree-label"
+name = "better-label-sheet"
 version = "2.0.0"
 authors = [
   { name="suheyldroid" },
@@ -23,11 +23,11 @@ Homepage = "https://github.com/suheyldroid/better-inventree-label-sheet"
 Issues = "https://github.com/suheyldroid/better-inventree-label-sheet/issues"
 
 [tool.setuptools]
-packages = ["better_label_printer"]
+packages = ["better_label_sheet"]
 
 [tool.pyright]
 pythonVersion = "3.9"
 reportIncompatibleVariableOverride = false
 
 [project.entry-points."inventree_plugins"]
-BetterLabelPrinter = 'better_label_printer.printing_plugin:BetterLabelPrinterPlugin'
+BetterLabelSheet = 'better_label_sheet.printing_plugin:BetterLabelSheetPlugin'

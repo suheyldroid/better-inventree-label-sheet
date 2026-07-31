@@ -8,6 +8,7 @@ A label printing plugin for [InvenTree](https://inventree.org) which provides su
 1. [Usage and Features](#usage-and-features)
     1. [Sheet layout](#sheet-layout)
     1. [Number of labels](#number-of-labels)
+    1. [Quantity mode](#quantity-mode)
     1. [Skip label positions](#skip-label-positions)
     1. [Ignore label size mismatch](#ignore-label-size-mismatch)
     1. [Print border](#print-border)
@@ -137,6 +138,15 @@ This results in a printout looking like this:
 ![Top of a page with two labels each for four parts into total](https://raw.githubusercontent.com/suheyldroid/better-inventree-label-sheet/main/images/multi_item_multi_labels.png)
 
 You can also specify to print zero labels. This is useful in combination with the "Skip label positions" and "Debug: Print border" options to print an empty grid of cells for testing.
+
+### Quantity mode
+
+When you select **multiple different stock items** (different stock numbers / quantities) and need a different label count for each one, use the ```Quantity mode``` option instead of printing separate PDFs:
+
+- **Same count for every selected item** (default): uses ```Number of labels``` for each selected item, as described above.
+- **Use each item's stock quantity**: each selected item contributes as many labels as its own stock quantity (for example stock A with qty 5 and stock B with qty 2 produces 7 labels on one sheet). If an item has no quantity field, ```Number of labels``` is used as fallback.
+
+Select all items in the stock/parts table, open Print Labels once, choose Better Label Sheet, set Quantity mode to **Use each item's stock quantity**, and generate a single PDF.
 
 ### Skip label positions
 

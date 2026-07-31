@@ -33,6 +33,7 @@ from .layouts import (
     default_layouts_json,
     parse_layouts_json,
 )
+from .quantities import QUANTITY_MODE_CHOICES, expand_items_by_quantity
 
 _log = logging.getLogger("better-label-sheet")
 # _log.setLevel(logging.DEBUG)
@@ -83,9 +84,25 @@ class BetterLabelSheetPrintingOptionsSerializer(serializers.Serializer):
         default=get_default_layout,
     )
 
+    quantity_mode = serializers.ChoiceField(
+        label="Quantity mode",
+        help_text=(
+            "How many labels to print for each selected item. "
+            "'Same count' uses Number of labels for every item. "
+            "'Use stock quantity' prints one label per unit of each item's "
+            "stock quantity (different stock items can have different counts "
+            "in a single PDF)."
+        ),
+        choices=QUANTITY_MODE_CHOICES,
+        default="uniform",
+    )
+
     count = serializers.IntegerField(
         label="Number of labels",
-        help_text="Number of labels to print for each kind",
+        help_text=(
+            "Number of labels to print for each selected item when Quantity mode "
+            "is 'Same count'. Also used as fallback when stock quantity is unavailable."
+        ),
         min_value=0,
         default=1,
     )
@@ -133,7 +150,7 @@ class BetterLabelSheetPlugin(
     SLUG = "better-label-sheet"
     TITLE = "Better Label Sheet"
     DESCRIPTION = "Flexible label printing: arrays labels onto standard label sheets with editable layouts and additional printing controls"
-    VERSION = "2.0.0"
+    VERSION = "2.1.0"
     AUTHOR = "suheyldroid, InvenTree contributors & melektron"
 
     BLOCKING_PRINT = True
@@ -341,6 +358,7 @@ class BetterLabelSheetPlugin(
         sheet_layout_code: str = printing_options.get(
             "sheet_layout", get_default_layout()
         )
+        quantity_mode: str = printing_options.get("quantity_mode", "uniform")
         label_count: int = printing_options.get("count", 1)
         skip_count: int = printing_options.get("skip", 0)
         ignore_size_mismatch: bool = printing_options.get("ignore_size_mismatch", False)
@@ -379,12 +397,13 @@ class BetterLabelSheetPlugin(
                     f"Label size ({label.width}mm x {label.height}mm) does not match the label size required for the selected layout ('{str(sheet_layout)}'). Select 'Ignore label size mismatch' to continue anyway."
                 )
 
-        # generate the actual list of labels to print by prepending the
-        # required number of skipped null labels and multiplying each lable by the
-        # specified amount
-        items = [None] * skip_count + [
-            label for item in input_items for label in [item] * label_count
-        ]
+        # Expand each selected item by its own label count (uniform or stock
+        # quantity), then prepend skipped empty positions for partially used sheets.
+        items: list[object | None] = [None] * skip_count + expand_items_by_quantity(
+            list(input_items),
+            quantity_mode,
+            label_count,
+        )
 
         # calculate all the used up label positions and store the new automatic skip
         # count for next time.

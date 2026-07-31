@@ -1,5 +1,5 @@
 """
-API views for the Better Label Printer plugin.
+API views for the Better Label Sheet plugin.
 
 These views back the layout editor UI panel, exposing the editable sheet
 layouts stored in the plugin's CUSTOM_LAYOUTS setting.
@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 
 from .layouts import SheetLayout, serialize_layouts
 
-_log = logging.getLogger("better-inventree-label-sheet")
+_log = logging.getLogger("better-label-sheet")
 
 
 class LayoutsView(APIView):

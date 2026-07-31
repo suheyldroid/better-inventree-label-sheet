@@ -3,7 +3,7 @@ name: Sheet Layout
 about: Add a new sheet layout that is still missing from the currently supported collection
 title: 'New Sheet layout: [layout name]'
 labels: sheet layout
-assignees: melektron
+assignees: suheyldroid
 
 ---
 
@@ -15,7 +15,7 @@ Just in case something needs to be verified or anyone wants to get any:
 
 **Page size configuration**
 
-See [here](https://github.com/melektron/inventree-adv-sheet-label/blob/main/advanced_sheet_label/layouts.py#L73) which paper sizes are already defined. If your paper size is not defined yet, please define it as follows:
+See [here](https://github.com/suheyldroid/better-inventree-label-sheet/blob/main/better_label_sheet/layouts.py) which paper sizes are already defined. If your paper size is not defined yet, please define it as follows:
 
 ```python
 # change the dimensions and names to your paper size

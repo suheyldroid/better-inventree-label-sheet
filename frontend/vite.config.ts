@@ -22,7 +22,7 @@ export default defineConfig({
       input: ['./src/LayoutsPanel.tsx'],
       external: Object.keys(externalLibs),
       output: {
-        dir: '../better_label_printer/static',
+        dir: '../better_label_sheet/static',
         entryFileNames: '[name].js',
         assetFileNames: 'assets/[name].[ext]',
         globals: externalLibs,

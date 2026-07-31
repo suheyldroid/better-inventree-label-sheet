@@ -8,6 +8,7 @@ A label printing plugin for [InvenTree](https://inventree.org) which provides su
 1. [Usage and Features](#usage-and-features)
     1. [Sheet layout](#sheet-layout)
     1. [Number of labels](#number-of-labels)
+    1. [Labels per item](#labels-per-item)
     1. [Skip label positions](#skip-label-positions)
     1. [Ignore label size mismatch](#ignore-label-size-mismatch)
     1. [Print border](#print-border)
@@ -118,7 +119,9 @@ You can also select one of the two ```Auto``` sheet layout presets. These will a
 
 ### Number of labels
 
-The ```Number of labels``` field lets you print multiple of the same label in one go. By default, the number of labels printed is 1, resulting in an output like this:
+> For mixed stock selections with different quantities, prefer [Labels per item](#labels-per-item) (stock quantity by default, editable per item).
+
+The ```Number of labels``` / ```Fallback label count``` field is used when prefill has no stock quantity available. By default this value is 1, resulting in an output like this:
 
 ![Top of a page with one label printed on it](https://raw.githubusercontent.com/suheyldroid/better-inventree-label-sheet/main/images/one_label.png)
 (The label template is only an example and this is only part of a page)
@@ -137,6 +140,18 @@ This results in a printout looking like this:
 ![Top of a page with two labels each for four parts into total](https://raw.githubusercontent.com/suheyldroid/better-inventree-label-sheet/main/images/multi_item_multi_labels.png)
 
 You can also specify to print zero labels. This is useful in combination with the "Skip label positions" and "Debug: Print border" options to print an empty grid of cells for testing.
+
+### Labels per item
+
+When you select **multiple different stock items**, the print dialog shows an editable **Labels per item** count for each selected item:
+
+- Each value defaults to that item's **stock quantity**
+- You can change any count before printing
+- All selected items are still printed onto **one** PDF / label sheet
+
+Example: stock A (qty 5) and stock B (qty 2) open with counts 5 and 2 prefilled. Change them to 3 and 1 if you only need those labels, then print once.
+
+If an item has no stock quantity, the **Fallback label count** value is used to prefill that item.
 
 ### Skip label positions
 

@@ -8,7 +8,7 @@ A label printing plugin for [InvenTree](https://inventree.org) which provides su
 1. [Usage and Features](#usage-and-features)
     1. [Sheet layout](#sheet-layout)
     1. [Number of labels](#number-of-labels)
-    1. [Quantity mode](#quantity-mode)
+    1. [Labels per item](#labels-per-item)
     1. [Skip label positions](#skip-label-positions)
     1. [Ignore label size mismatch](#ignore-label-size-mismatch)
     1. [Print border](#print-border)
@@ -139,14 +139,17 @@ This results in a printout looking like this:
 
 You can also specify to print zero labels. This is useful in combination with the "Skip label positions" and "Debug: Print border" options to print an empty grid of cells for testing.
 
-### Quantity mode
+### Labels per item
 
-When you select **multiple different stock items** (different stock numbers / quantities) and need a different label count for each one, use the ```Quantity mode``` option instead of printing separate PDFs:
+When you select **multiple different stock items**, the print dialog shows an editable **Labels per item** count for each selected item:
 
-- **Same count for every selected item** (default): uses ```Number of labels``` for each selected item, as described above.
-- **Use each item's stock quantity**: each selected item contributes as many labels as its own stock quantity (for example stock A with qty 5 and stock B with qty 2 produces 7 labels on one sheet). If an item has no quantity field, ```Number of labels``` is used as fallback.
+- Each value defaults to that item's **stock quantity**
+- You can change any count before printing
+- All selected items are still printed onto **one** PDF / label sheet
 
-Select all items in the stock/parts table, open Print Labels once, choose Better Label Sheet, set Quantity mode to **Use each item's stock quantity**, and generate a single PDF.
+Example: stock A (qty 5) and stock B (qty 2) open with counts 5 and 2 prefilled. Change them to 3 and 1 if you only need those labels, then print once.
+
+If an item has no stock quantity, the **Fallback label count** value is used to prefill that item.
 
 ### Skip label positions
 

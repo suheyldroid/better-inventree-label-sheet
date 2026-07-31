@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import logging
 import math
+from types import SimpleNamespace
 
 import weasyprint
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.validators import MinValueValidator
-from django.http import JsonResponse
 from django.utils.translation import gettext_lazy as _
 from plugin import InvenTreePlugin
 from plugin.mixins import (
@@ -21,6 +21,7 @@ from plugin.mixins import (
     UrlsMixin,
     UserInterfaceMixin,
 )
+from InvenTree.serializers import DependentField
 from report.models import DataOutput, LabelTemplate
 from rest_framework import serializers
 from rest_framework.request import Request
@@ -33,7 +34,12 @@ from .layouts import (
     default_layouts_json,
     parse_layouts_json,
 )
-from .quantities import QUANTITY_MODE_CHOICES, expand_items_by_quantity
+from .quantities import (
+    expand_items_by_quantity,
+    item_display_name,
+    normalize_item_quantity_overrides,
+    stock_quantity_as_label_count,
+)
 
 _log = logging.getLogger("better-label-sheet")
 # _log.setLevel(logging.DEBUG)
@@ -74,8 +80,62 @@ def get_default_skip() -> int:
     return 0
 
 
+def _parse_item_ids(raw_items: object) -> list[int]:
+    """Normalize selected item IDs from the print form/request payload."""
+    if raw_items is None:
+        return []
+
+    if isinstance(raw_items, str):
+        parts = [part.strip() for part in raw_items.split(",") if part.strip()]
+        return [int(part) for part in parts]
+
+    if not isinstance(raw_items, (list, tuple)):
+        return []
+
+    item_ids: list[int] = []
+    for value in raw_items:
+        item_ids.append(int(value))
+    return item_ids
+
+
+def _load_selected_items(template_id: object, item_ids: list[int]) -> list[object]:
+    """Load selected model instances in the order provided by the print form."""
+    if template_id is None or len(item_ids) == 0:
+        return []
+
+    try:
+        template = LabelTemplate.objects.filter(pk=int(template_id)).first()
+    except (TypeError, ValueError):
+        return []
+
+    if template is None:
+        return []
+
+    model_class = template.get_model()
+    if model_class is None:
+        return []
+
+    instances = list(model_class.objects.filter(pk__in=item_ids))
+    order = {pk: index for index, pk in enumerate(item_ids)}
+    instances.sort(key=lambda item: order.get(int(getattr(item, "pk")), 0))
+    return instances
+
+
 class BetterLabelSheetPrintingOptionsSerializer(serializers.Serializer):
     """Custom printing options for the better label sheet plugin."""
+
+    # Declared before sheet_layout so the dependent field can subscribe before
+    # sheet_layout's default value is applied (triggers quantity loading).
+    item_quantities = DependentField(
+        depends_on=["sheet_layout"],
+        field_serializer="get_item_quantities",
+        label="Labels per item",
+        help_text=(
+            "Editable label count for each selected item. Defaults to each item's "
+            "stock quantity; change any value before printing."
+        ),
+        required=False,
+    )
 
     sheet_layout = serializers.ChoiceField(
         label="Sheet layout",
@@ -84,24 +144,11 @@ class BetterLabelSheetPrintingOptionsSerializer(serializers.Serializer):
         default=get_default_layout,
     )
 
-    quantity_mode = serializers.ChoiceField(
-        label="Quantity mode",
-        help_text=(
-            "How many labels to print for each selected item. "
-            "'Same count' uses Number of labels for every item. "
-            "'Use stock quantity' prints one label per unit of each item's "
-            "stock quantity (different stock items can have different counts "
-            "in a single PDF)."
-        ),
-        choices=QUANTITY_MODE_CHOICES,
-        default="uniform",
-    )
-
     count = serializers.IntegerField(
-        label="Number of labels",
+        label="Fallback label count",
         help_text=(
-            "Number of labels to print for each selected item when Quantity mode "
-            "is 'Same count'. Also used as fallback when stock quantity is unavailable."
+            "Used to prefill Labels per item when an item has no stock quantity. "
+            "Per-item values above take precedence when printing."
         ),
         min_value=0,
         default=1,
@@ -132,6 +179,48 @@ class BetterLabelSheetPrintingOptionsSerializer(serializers.Serializer):
         default="unset",
     )
 
+    def get_item_quantities(self, fields: dict[str, object]) -> serializers.Serializer | None:
+        """Build editable per-item quantity fields, prefilled from stock quantity."""
+        item_ids = _parse_item_ids(fields.get("items"))
+        if len(item_ids) == 0:
+            return None
+
+        fallback = 1
+        raw_count = fields.get("count", 1)
+        if isinstance(raw_count, (int, float, str)):
+            try:
+                fallback = max(0, int(raw_count))
+            except (TypeError, ValueError):
+                fallback = 1
+
+        selected_items = _load_selected_items(fields.get("template"), item_ids)
+        if len(selected_items) == 0:
+            # Template/items not resolvable yet; still expose editable fields keyed by ID.
+            selected_items = [SimpleNamespace(pk=pk) for pk in item_ids]
+
+        quantity_fields: dict[str, serializers.Field] = {}
+        for item in selected_items:
+            pk = getattr(item, "pk", None)
+            if pk is None:
+                continue
+            key = str(int(pk))
+            quantity_fields[key] = serializers.IntegerField(
+                label=item_display_name(item),
+                help_text="Number of labels to print for this item",
+                min_value=0,
+                default=stock_quantity_as_label_count(item, fallback=fallback),
+                required=False,
+            )
+
+        if len(quantity_fields) == 0:
+            return None
+
+        return type(
+            "ItemQuantitiesSerializer",
+            (serializers.Serializer,),
+            quantity_fields,
+        )()
+
 
 class BetterLabelSheetPlugin(
     LabelPrintingMixin,
@@ -150,7 +239,7 @@ class BetterLabelSheetPlugin(
     SLUG = "better-label-sheet"
     TITLE = "Better Label Sheet"
     DESCRIPTION = "Flexible label printing: arrays labels onto standard label sheets with editable layouts and additional printing controls"
-    VERSION = "2.1.0"
+    VERSION = "2.2.0"
     AUTHOR = "suheyldroid, InvenTree contributors & melektron"
 
     BLOCKING_PRINT = True
@@ -358,12 +447,17 @@ class BetterLabelSheetPlugin(
         sheet_layout_code: str = printing_options.get(
             "sheet_layout", get_default_layout()
         )
-        quantity_mode: str = printing_options.get("quantity_mode", "uniform")
         label_count: int = printing_options.get("count", 1)
         skip_count: int = printing_options.get("skip", 0)
         ignore_size_mismatch: bool = printing_options.get("ignore_size_mismatch", False)
         border: bool = printing_options.get("border", False)
         fill_color: str = printing_options.get("fill_color", "")
+        try:
+            item_quantity_overrides = normalize_item_quantity_overrides(
+                printing_options.get("item_quantities")
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
 
         # get sheet layout information
         sheet_layout: SheetLayout = ...
@@ -397,11 +491,11 @@ class BetterLabelSheetPlugin(
                     f"Label size ({label.width}mm x {label.height}mm) does not match the label size required for the selected layout ('{str(sheet_layout)}'). Select 'Ignore label size mismatch' to continue anyway."
                 )
 
-        # Expand each selected item by its own label count (uniform or stock
-        # quantity), then prepend skipped empty positions for partially used sheets.
+        # Expand each selected item by its editable per-item count (defaults to
+        # stock quantity), then prepend skipped empty positions for partial sheets.
         items: list[object | None] = [None] * skip_count + expand_items_by_quantity(
             list(input_items),
-            quantity_mode,
+            item_quantity_overrides,
             label_count,
         )
 

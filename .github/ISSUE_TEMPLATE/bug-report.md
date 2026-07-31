@@ -18,8 +18,8 @@ Configuration to reproduce the behavior:
 - The label template code used (can be copied from the admin settings): (attach as file to the PR or add code block)
 - Item type printed: Part/Stock Item/Stock Location/...
 - Sheet layout selection: 
-- Quantity mode:
-- Number of labels: 
+- Labels per item:
+- Fallback label count: 
 - Skip label positions:
 - Ignore label size mismatch: ON/OFF
 - Print border: ON/OFF

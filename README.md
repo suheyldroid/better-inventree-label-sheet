@@ -119,7 +119,9 @@ You can also select one of the two ```Auto``` sheet layout presets. These will a
 
 ### Number of labels
 
-The ```Number of labels``` field lets you print multiple of the same label in one go. By default, the number of labels printed is 1, resulting in an output like this:
+> For mixed stock selections with different quantities, prefer [Labels per item](#labels-per-item) (stock quantity by default, editable per item).
+
+The ```Number of labels``` / ```Fallback label count``` field is used when prefill has no stock quantity available. By default this value is 1, resulting in an output like this:
 
 ![Top of a page with one label printed on it](https://raw.githubusercontent.com/suheyldroid/better-inventree-label-sheet/main/images/one_label.png)
 (The label template is only an example and this is only part of a page)

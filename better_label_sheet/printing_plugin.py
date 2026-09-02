@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import math
-from types import SimpleNamespace
+from typing import Mapping
 
 import weasyprint
 from django.core.exceptions import ValidationError
@@ -21,7 +21,6 @@ from plugin.mixins import (
     UrlsMixin,
     UserInterfaceMixin,
 )
-from InvenTree.serializers import DependentField
 from report.models import DataOutput, LabelTemplate
 from rest_framework import serializers
 from rest_framework.request import Request
@@ -34,12 +33,7 @@ from .layouts import (
     default_layouts_json,
     parse_layouts_json,
 )
-from .quantities import (
-    expand_items_by_quantity,
-    item_display_name,
-    normalize_item_quantity_overrides,
-    stock_quantity_as_label_count,
-)
+from .quantities import expand_items_by_quantity, normalize_item_quantity_overrides
 
 _log = logging.getLogger("better-label-sheet")
 # _log.setLevel(logging.DEBUG)
@@ -80,62 +74,54 @@ def get_default_skip() -> int:
     return 0
 
 
-def _parse_item_ids(raw_items: object) -> list[int]:
-    """Normalize selected item IDs from the print form/request payload."""
-    if raw_items is None:
-        return []
-
-    if isinstance(raw_items, str):
-        parts = [part.strip() for part in raw_items.split(",") if part.strip()]
-        return [int(part) for part in parts]
-
-    if not isinstance(raw_items, (list, tuple)):
-        return []
-
-    item_ids: list[int] = []
-    for value in raw_items:
-        item_ids.append(int(value))
-    return item_ids
-
-
-def _load_selected_items(template_id: object, item_ids: list[int]) -> list[object]:
-    """Load selected model instances in the order provided by the print form."""
-    if template_id is None or len(item_ids) == 0:
-        return []
-
+def _parse_item_quantity_list(
+    raw_quantities: str, items: list[object]
+) -> dict[str, int]:
+    """Parse comma-separated per-item counts in the selected item order."""
     try:
-        template = LabelTemplate.objects.filter(pk=int(template_id)).first()
-    except (TypeError, ValueError):
-        return []
+        counts = [
+            int(value.strip())
+            for value in raw_quantities.replace(";", ",").split(",")
+            if value.strip()
+        ]
+    except ValueError as exc:
+        raise ValidationError("Labels per item must be comma-separated numbers.") from exc
 
-    if template is None:
-        return []
+    if len(counts) != len(items):
+        raise ValidationError(
+            f"Labels per item needs {len(items)} counts, got {len(counts)}."
+        )
 
-    model_class = template.get_model()
-    if model_class is None:
-        return []
+    if any(count < 0 for count in counts):
+        raise ValidationError("Labels per item cannot contain negative numbers.")
 
-    instances = list(model_class.objects.filter(pk__in=item_ids))
-    order = {pk: index for index, pk in enumerate(item_ids)}
-    instances.sort(key=lambda item: order.get(int(getattr(item, "pk")), 0))
-    return instances
+    overrides: dict[str, int] = {}
+    for index, item in enumerate(items):
+        overrides[str(getattr(item, "pk", index))] = counts[index]
+    return overrides
+
+
+def _normalize_item_quantities(
+    raw_quantities: object, items: list[object]
+) -> dict[str, int] | None:
+    """Accept old object payloads or simple comma-separated counts."""
+    if raw_quantities is None or raw_quantities == "":
+        return None
+
+    if isinstance(raw_quantities, str):
+        return _parse_item_quantity_list(raw_quantities, items)
+
+    if isinstance(raw_quantities, Mapping):
+        try:
+            return normalize_item_quantity_overrides(raw_quantities)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+
+    raise ValidationError("Labels per item must be comma-separated numbers.")
 
 
 class BetterLabelSheetPrintingOptionsSerializer(serializers.Serializer):
     """Custom printing options for the better label sheet plugin."""
-
-    # Declared before sheet_layout so the dependent field can subscribe before
-    # sheet_layout's default value is applied (triggers quantity loading).
-    item_quantities = DependentField(
-        depends_on=["sheet_layout"],
-        field_serializer="get_item_quantities",
-        label="Labels per item",
-        help_text=(
-            "Editable label count for each selected item. Defaults to each item's "
-            "stock quantity; change any value before printing."
-        ),
-        required=False,
-    )
 
     sheet_layout = serializers.ChoiceField(
         label="Sheet layout",
@@ -145,13 +131,18 @@ class BetterLabelSheetPrintingOptionsSerializer(serializers.Serializer):
     )
 
     count = serializers.IntegerField(
-        label="Fallback label count",
-        help_text=(
-            "Used to prefill Labels per item when an item has no stock quantity. "
-            "Per-item values above take precedence when printing."
-        ),
+        label="Number of labels",
+        help_text="Number of labels to print for each selected item, unless 'Labels per item' is set",
         min_value=0,
         default=1,
+    )
+
+    item_quantities = serializers.CharField(
+        label="Labels per item",
+        help_text="Optional comma-separated counts for selected items, in order. Use 0 to skip an item, e.g. 2,0,5.",
+        required=False,
+        allow_blank=True,
+        default="",
     )
 
     skip = serializers.IntegerField(
@@ -178,48 +169,6 @@ class BetterLabelSheetPrintingOptionsSerializer(serializers.Serializer):
         help_text="Background color to fill all the labels with. This helps make the shape and size clearer for testing.",
         default="unset",
     )
-
-    def get_item_quantities(self, fields: dict[str, object]) -> serializers.Serializer | None:
-        """Build editable per-item quantity fields, prefilled from stock quantity."""
-        item_ids = _parse_item_ids(fields.get("items"))
-        if len(item_ids) == 0:
-            return None
-
-        fallback = 1
-        raw_count = fields.get("count", 1)
-        if isinstance(raw_count, (int, float, str)):
-            try:
-                fallback = max(0, int(raw_count))
-            except (TypeError, ValueError):
-                fallback = 1
-
-        selected_items = _load_selected_items(fields.get("template"), item_ids)
-        if len(selected_items) == 0:
-            # Template/items not resolvable yet; still expose editable fields keyed by ID.
-            selected_items = [SimpleNamespace(pk=pk) for pk in item_ids]
-
-        quantity_fields: dict[str, serializers.Field] = {}
-        for item in selected_items:
-            pk = getattr(item, "pk", None)
-            if pk is None:
-                continue
-            key = str(int(pk))
-            quantity_fields[key] = serializers.IntegerField(
-                label=item_display_name(item),
-                help_text="Number of labels to print for this item",
-                min_value=0,
-                default=stock_quantity_as_label_count(item, fallback=fallback),
-                required=False,
-            )
-
-        if len(quantity_fields) == 0:
-            return None
-
-        return type(
-            "ItemQuantitiesSerializer",
-            (serializers.Serializer,),
-            quantity_fields,
-        )()
 
 
 class BetterLabelSheetPlugin(
@@ -371,25 +320,22 @@ class BetterLabelSheetPlugin(
                 )
 
         # find match according to size
-        # define cost function: geometric average of size and width deviation. too small is always infinite cost
-        cost_function = lambda dw, dh: (
-            float("inf") if dw < 0 or dh < 0 else math.sqrt(dw**2 + dh**2)
-        )
-        # collect exact size matches
+        def cost_function(dw, dh):
+            # too small is always infinite cost
+            if dw < 0 or dh < 0:
+                return math.inf
+            return math.sqrt(dw**2 + dh**2)
+
         exact_matches: list[SheetLayout] = []
-        # collect the closest match if nothing exact is found
-        closest_match: tuple[float, SheetLayout] = ...
+        closest_match: tuple[float, SheetLayout] | None = None
 
         # go through all layouts to find best solution
-        for _, layout in layouts.items():
-            if (  # if we have exact matches, no need to check for closest contender
-                (
-                    layout.label_height == label.height
-                    and layout.label_width == label.width
-                )
-                or len(exact_matches) > 0
-            ):
+        for _layout_code, layout in layouts.items():
+            if layout.label_height == label.height and layout.label_width == label.width:
                 exact_matches.append(layout)
+                continue
+
+            if len(exact_matches) > 0:
                 continue
 
             # calculate the cost and save if it was better than the last one
@@ -398,20 +344,21 @@ class BetterLabelSheetPlugin(
                 layout.label_height - label.height,
             )
             _log.debug(f"{layout=}: costs {cost}")
-            if closest_match is ... or cost < closest_match[0]:
+            if closest_match is None or cost < closest_match[0]:
                 closest_match = (cost, layout)
 
         if len(exact_matches) > 0:  # exact matches have been found
-            # find the prefered match
+            # find the preferred match
             for match in exact_matches:
-                if prefer_round and match.corner_radius > 0:
-                    return match, False, True
-                elif not prefer_round and match.corner_radius == 0:
+                if (prefer_round and match.corner_radius > 0) or (
+                    not prefer_round and match.corner_radius == 0
+                ):
                     return match, False, True
             # otherwise just return the first one
             return exact_matches[0], False, True
 
-        # no exact matches found
+        if closest_match is None:
+            raise ValidationError("No sheet layouts are configured.")
         return closest_match[1], False, False
 
     def print_labels(
@@ -452,15 +399,12 @@ class BetterLabelSheetPlugin(
         ignore_size_mismatch: bool = printing_options.get("ignore_size_mismatch", False)
         border: bool = printing_options.get("border", False)
         fill_color: str = printing_options.get("fill_color", "")
-        try:
-            item_quantity_overrides = normalize_item_quantity_overrides(
-                printing_options.get("item_quantities")
-            )
-        except ValueError as exc:
-            raise ValidationError(str(exc)) from exc
+        item_quantity_overrides = _normalize_item_quantities(
+            printing_options.get("item_quantities"), list(input_items)
+        )
 
         # get sheet layout information
-        sheet_layout: SheetLayout = ...
+        sheet_layout: SheetLayout | None = None
 
         if sheet_layout_code in ["auto_round", "auto_sharp"]:  # automatic detection
             sheet_layout, specified, is_exact = self._find_closest_match(
@@ -478,10 +422,10 @@ class BetterLabelSheetPlugin(
         else:  # explicit layout selection
             try:
                 sheet_layout = self.get_layouts()[sheet_layout_code]
-            except KeyError:
+            except KeyError as exc:
                 raise ValidationError(
                     f"Sheet layout '{sheet_layout_code}' does not exist."
-                )
+                ) from exc
 
             if (
                 sheet_layout.label_height != label.height
@@ -491,13 +435,23 @@ class BetterLabelSheetPlugin(
                     f"Label size ({label.width}mm x {label.height}mm) does not match the label size required for the selected layout ('{str(sheet_layout)}'). Select 'Ignore label size mismatch' to continue anyway."
                 )
 
-        # Expand each selected item by its editable per-item count (defaults to
-        # stock quantity), then prepend skipped empty positions for partial sheets.
-        items: list[object | None] = [None] * skip_count + expand_items_by_quantity(
-            list(input_items),
-            item_quantity_overrides,
-            label_count,
-        )
+        if sheet_layout is None:
+            raise ValidationError("No sheet layout selected.")
+
+        # Expand selected items by either the shared count or editable per-item
+        # counts, then prepend skipped empty positions for partial sheets.
+        if item_quantity_overrides is None:
+            label_items = [
+                item for item in input_items for _index in range(label_count)
+            ]
+        else:
+            label_items = expand_items_by_quantity(
+                list(input_items),
+                item_quantity_overrides,
+                label_count,
+            )
+        items: list[object | None] = [None for _index in range(skip_count)]
+        items.extend(label_items)
 
         # calculate all the used up label positions and store the new automatic skip
         # count for next time.

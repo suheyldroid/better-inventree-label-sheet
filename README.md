@@ -118,9 +118,9 @@ You can also select one of the two ```Auto``` sheet layout presets. These will a
 
 ### Number of labels
 
-> For mixed stock selections with different quantities, prefer [Labels per item](#labels-per-item) (stock quantity by default, editable per item).
+> For mixed selections with different quantities, prefer [Labels per item](#labels-per-item).
 
-The ```Number of labels``` / ```Fallback label count``` field is used when prefill has no stock quantity available. By default this value is 1, resulting in an output like this:
+The ```Number of labels``` field lets you print multiple of the same label in one go. By default this value is 1, resulting in an output like this:
 
 ![Top of a page with one label printed on it](https://raw.githubusercontent.com/suheyldroid/better-inventree-label-sheet/main/images/one_label.png)
 (The label template is only an example and this is only part of a page)
@@ -142,15 +142,9 @@ You can also specify to print zero labels. This is useful in combination with th
 
 ### Labels per item
 
-When you select **multiple different stock items**, the print dialog shows an editable **Labels per item** count for each selected item:
+When you select **multiple different stock items**, use **Labels per item** to override the shared count with comma-separated counts in the same order as the selected items.
 
-- Each value defaults to that item's **stock quantity**
-- You can change any count before printing
-- All selected items are still printed onto **one** PDF / label sheet
-
-Example: stock A (qty 5) and stock B (qty 2) open with counts 5 and 2 prefilled. Change them to 3 and 1 if you only need those labels, then print once.
-
-If an item has no stock quantity, the **Fallback label count** value is used to prefill that item.
+Example: enter ```5,2``` for two selected items to print 5 labels for the first item and 2 labels for the second item. Use ```0``` to skip an item. If this field is empty, **Number of labels** is used for every selected item.
 
 ### Skip label positions
 
